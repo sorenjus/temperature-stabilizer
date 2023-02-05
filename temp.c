@@ -67,7 +67,7 @@ int main()
 
   //double temp[NUM_CHILDREN];
   
-  int *fd;
+  int fd[6][2];
 
   while (running)
   {
@@ -83,33 +83,45 @@ int main()
       while (token != NULL)
       {
         NUM_CHILDREN++;
-        if (NUM_CHILDREN > -1)
-          tempArr[NUM_CHILDREN- 1] = atoi(token);
+        if (NUM_CHILDREN > 0)
+          tempArr[NUM_CHILDREN - 1] = atoi(token);
         token = strtok(NULL, delim);
       }
       pid_t id;
       printf("Create %d external processes\n", NUM_CHILDREN);
-      for (int k = 0; k < NUM_CHILDREN; k++)
-      {
-        fd = &fd[2*NUM_CHILDREN];
+      
+      for(int i = 0; i < NUM_CHILDREN; i++){
+        pipe(fd[i]);
       }
 
-      pipe(fd);
-
       for (int k = 0; k < NUM_CHILDREN; k++)
       {
-        //pipe(fd + k * 2);
         id = fork();
-        //close(fd[k]);
         if (id == 0)
         {
-          doChildWork(k, tempArr[k]);
+          for(int i = 0; i < NUM_CHILDREN; i++){
+            if(i == k){
+              close(fd[k][1]);
+            }
+            else{
+              close(fd[k][0]);
+              close(fd[k][1]);
+            }
+          }
+          
+          double tempIn = 0;
+          read(fd[k][0], &tempIn, sizeof(double));
+          printf("%f\n", tempIn);
+          doChildWork(k, tempIn);
+  
           exit(32);
         }
         else
         {
           children[k] = id;
+          close(fd[k][0]);
           printf("Process %d: set initial temperature to %f\n", children[k], tempArr[k]);
+          write (fd[k][1], &tempArr[k], sizeof(double));
           // more code for parent here
           // close pipe, send temp to chld
         }
@@ -135,11 +147,13 @@ int main()
     else if (strstr(command, "status"))
     {
       printf("Alpha = %.2f\tK = %.1f\nCentral temp is %.2f\n", alpha, kval, ctemp);
-      if(NUM_CHILDREN > -1){
+      printf("Parent %d\n", getpid());
+      if(NUM_CHILDREN > 0){
         printf(" #    PID   Enabled  Temperature\n--- ------- -------  -----------\n");
         for (size_t i = 0; i < NUM_CHILDREN; i++)
         {
           int k = i + 1;
+          
           printf("%d   %d    YES       %.2f\n",k, children[i], tempArr[i]);
         }
         
