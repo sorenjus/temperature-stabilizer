@@ -9,12 +9,11 @@
 #include <stdbool.h>
 #include <string.h>
 
-int NUM_CHILDREN = 0;
+int NUM_CHILDREN = -1;
 char *delim = " ";
 char *token;
 int counter;
 bool running = true;
-int fd[20];
 pid_t children[20];
 double tempArr[20];
 
@@ -39,36 +38,7 @@ void doChildWork(int childNum, double temp)
 }
 
 void external(char* command){
-  NUM_CHILDREN = -1;
-
-      token = strtok(command, delim);
-
-      /* walk through other tokens */
-      while (token != NULL)
-      {
-        NUM_CHILDREN++;
-        if (NUM_CHILDREN > -1)
-          tempArr[NUM_CHILDREN- 1] = atoi(token);
-        token = strtok(NULL, delim);
-      }
-      pid_t id;
-      printf("Create %d external processes\n", NUM_CHILDREN);
-      for (int k = 0; k < NUM_CHILDREN; k++)
-      {
-        id = fork();
-        if (id == 0)
-        {
-          doChildWork(k, tempArr[k]);
-          exit(32);
-        }
-        else
-        {
-          children[k] = id;
-          printf("Process %d: set initial temperature to %f\n", children[k], tempArr[k]);
-          // more code for parent here
-          // close pipe, send temp to chld
-        }
-      }
+  
 }
 
 int setVal(char *command)
@@ -95,19 +65,56 @@ int main()
   double ctemp = 0;
   double alpha = 0;
 
-  double temp[NUM_CHILDREN];
-  int pvc[NUM_CHILDREN * 2];
+  //double temp[NUM_CHILDREN];
+  
+  int *fd;
 
   while (running)
   {
-    pipe(fd);
     char command[256] = "";
 
     fgets(command, sizeof command, stdin);
 
     if (strstr(command, "external"))
     {
-      external(command);
+      token = strtok(command, delim);
+
+      /* walk through other tokens */
+      while (token != NULL)
+      {
+        NUM_CHILDREN++;
+        if (NUM_CHILDREN > -1)
+          tempArr[NUM_CHILDREN- 1] = atoi(token);
+        token = strtok(NULL, delim);
+      }
+      pid_t id;
+      printf("Create %d external processes\n", NUM_CHILDREN);
+      for (int k = 0; k < NUM_CHILDREN; k++)
+      {
+        fd = &fd[2*NUM_CHILDREN];
+      }
+
+      pipe(fd);
+
+      for (int k = 0; k < NUM_CHILDREN; k++)
+      {
+        //pipe(fd + k * 2);
+        id = fork();
+        //close(fd[k]);
+        if (id == 0)
+        {
+          doChildWork(k, tempArr[k]);
+          exit(32);
+        }
+        else
+        {
+          children[k] = id;
+          printf("Process %d: set initial temperature to %f\n", children[k], tempArr[k]);
+          // more code for parent here
+          // close pipe, send temp to chld
+        }
+      }
+
     }
     else if (strstr(command, "k"))
     {
