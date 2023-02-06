@@ -16,6 +16,8 @@ int counter;
 bool running = true;
 pid_t children[20];
 double tempArr[20];
+double childtemp = temp;
+double alpha = 0;
 
 void iteration()
 {
@@ -23,18 +25,12 @@ void iteration()
 
 void doChildWork(int childNum, double temp)
 {
-  // Do initialization
-  double childtemp = temp;
-  double alpha = 0;
-  int id = getpid();
 
-  // signals
-  signal(SIGUSR1, iteration);
-
-  fflush(NULL);
-  // Do main child work
-  pause(); // wait for signal to start
   // Do child cleanup
+}
+
+void updateChildAlpha(double changeAlpha){
+  alpha = changeAlpha;
 }
 
 void external(char *command)
@@ -63,7 +59,7 @@ int main()
 {
   double kval = 200;
   double ctemp = 0;
-  double alpha = 0;
+  double centralAlpha = 0;
 
   // double temp[NUM_CHILDREN];
 
@@ -100,11 +96,20 @@ int main()
         id = fork();
         if (id == 0)
         {
-          double tempIn = 0;
-          read(fd[k][0], &tempIn, sizeof(double));
-          printf("%f\n", tempIn);
-          doChildWork(k, tempIn);
+          // Do initialization
+          int id = getpid();
 
+          // signals
+          signal(SIGUSR1, doChildWork);
+          signal(SIGUSR2, changeAlpha);
+
+          fflush(NULL);
+          read(fd[k][0], childtemp, sizeof(double));
+          read(fd[k][0], alpha, sizeof(double));
+          printf("%f\n", childtemp);
+          
+          pause(); // wait for signal to start child work
+          
           exit(32);
         }
         else
@@ -112,6 +117,7 @@ int main()
           children[k] = id;
           printf("Process %d: set initial temperature to %f\n", children[k], tempArr[k]);
           write(fd[k][1], &tempArr[k], sizeof(double));
+          write(fd[k][1], centralAlpha, sizeof(double));
           // more code for parent here
           // close pipe, send temp to chld
         }
@@ -127,14 +133,14 @@ int main()
     }
     else if (strstr(command, "alpha"))
     {
-      alpha = setVal(command);
+      centralAlpha = setVal(command);
     }
     else if (strstr(command, "start"))
     {
     }
     else if (strstr(command, "status"))
     {
-      printf("Alpha = %.2f\tK = %.1f\nCentral temp is %.2f\n", alpha, kval, ctemp);
+      printf("Alpha = %.2f\tK = %.1f\nCentral temp is %.2f\n", centralAlpha, kval, ctemp);
       printf("Parent %d\n", getpid());
       if (NUM_CHILDREN > 0)
       {
