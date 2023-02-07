@@ -57,9 +57,8 @@ void updateChildAlpha()
   fflush(NULL);
 }
 
-int readETemp(char *command)
+int readETemp(char *token)
 {
-  token = strtok(command, delim);
   int counter = 0;
   char *ptr;
   int targetChild;
@@ -97,9 +96,8 @@ void setETemp()
   fflush(NULL);
 }
 
-double setVal(char *command)
+double setVal(char *token)
 {
-  token = strtok(command, delim);
   int counter = 0;
   char *ptr;
 
@@ -125,9 +123,10 @@ int main()
 
     fgets(command, sizeof command, stdin);
 
-    if (strstr(command, "external"))
+    token = strtok(command, delim);
+
+    if (!strcmp(token, "external"))
     {
-      token = strtok(command, delim);
 
       /* walk through other tokens */
       while (token != NULL)
@@ -184,30 +183,30 @@ int main()
         }
       }
     }
-    else if (strstr(command, "k"))
+    else if (!strcmp(token, "k"))
     {
-      kval = setVal(command);
+      kval = setVal(token);
     }
-    else if (strstr(command, "ctemp"))
+    else if (!strcmp(token, "ctemp"))
     {
-      ctemp = setVal(command);
+      ctemp = setVal(token);
       printf("Central temp is now %0.2f\n", ctemp);
     }
-    else if (strstr(command, "etemp"))
+    else if (!strcmp(token, "etemp"))
     {
-      int target = readETemp(command);
+      int target = readETemp(token);
       kill(target, SIGCONT);
     }
-    else if (strstr(command, "alpha"))
+    else if (!strcmp(token, "alpha"))
     {
-      alpha = setVal(command);
+      alpha = setVal(token);
       for (int i = 0; i < NUM_CHILDREN; i++)
       {
         write(fd[i][1], &alpha, sizeof(double));
         kill(children[i], SIGUSR2);
       }
     }
-    else if (strstr(command, "start"))
+    else if (!strcmp(token, "start\n"))
     {
       bool start = true;
       bool allMatch = false;
@@ -269,7 +268,7 @@ int main()
       }
       printf("The system stabilized at %0.3f\n", ctemp);
     }
-    else if (strstr(command, "status"))
+    else if (!strcmp(token, "status\n"))
     {
       printf("Alpha = %.2f\tK = %.1f\nCentral temp is %.2f\n", alpha, kval, ctemp);
       if (NUM_CHILDREN > 0)
@@ -283,7 +282,7 @@ int main()
         }
       }
     }
-    else if (strstr(command, "quit"))
+    else if (!strcmp(token, "quit\n"))
     {
       for (int k = 0; k < NUM_CHILDREN; k++)
       {
