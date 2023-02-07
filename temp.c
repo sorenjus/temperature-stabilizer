@@ -8,46 +8,108 @@
 #include <errno.h>
 #include <stdbool.h>
 #include <string.h>
+#include <math.h>
 
 int NUM_CHILDREN = -1;
+double childtemp = 0;
+int childNum = -1;
+
 char *delim = " ";
 char *token;
-int counter;
+char command[256] = "";
+
+double alpha = 0.9;
+double kval = 200;
+double ctemp = 0;
+pid_t children[10];
+double tempArr[10];
+int tempMatch[10];
+
+int fd[20][2];
+
 bool running = true;
-pid_t children[20];
-double tempArr[20];
-double childtemp = temp;
-double alpha = 0;
 
-void iteration()
+void doChildWork()
 {
+  while (running)
+  {
+    read(fd[childNum][0], &ctemp, sizeof(double));
+    if (ctemp == 0)
+    {
+      running = false;
+    }
+    else
+    {
+      childtemp = (alpha * childtemp) + ((1 - alpha) * ctemp);
+      // printf("child temp : %f\n", childtemp);
+      childtemp = floorf(childtemp * 1000) / 1000;
+      fflush(NULL);
+      write(fd[childNum + NUM_CHILDREN][1], &childtemp, sizeof(double));
+    }
+  }
+  running = true;
 }
 
-void doChildWork(int childNum, double temp)
+void updateChildAlpha()
 {
-
-  // Do child cleanup
+  read(fd[childNum][0], &alpha, sizeof(double));
+  printf("%d: set alpha to : %f\n", getpid(), alpha);
+  fflush(NULL);
 }
 
-void updateChildAlpha(double changeAlpha){
-  alpha = changeAlpha;
-}
-
-void external(char *command)
-{
-}
-
-int setVal(char *command)
+int readETemp(char *command)
 {
   token = strtok(command, delim);
-  counter = 0;
+  int counter = 0;
+  char *ptr;
+  int targetChild;
 
   /* walk through other tokens */
   while (token != NULL)
   {
     if (counter == 1)
     {
-      return atoi(token);
+      // printf("%f", strtod(token, &ptr));
+      targetChild = atoi(token);
+    }
+    else if (counter == 2)
+    {
+      childtemp = strtod(token, &ptr);
+    }
+    token = strtok(NULL, delim);
+    counter++;
+  }
+  for (int i = 0; i < NUM_CHILDREN; i++)
+  {
+    if (children[i] == targetChild)
+    {
+      write(fd[i][1], &childtemp, sizeof(double));
+      tempArr[i] = childtemp;
+    }
+  }
+  return targetChild;
+}
+
+void setETemp()
+{
+  read(fd[childNum][0], &childtemp, sizeof(double));
+  printf("%d: Ext. temperature set to %0.2f\n", getpid(), childtemp);
+  fflush(NULL);
+}
+
+double setVal(char *command)
+{
+  token = strtok(command, delim);
+  int counter = 0;
+  char *ptr;
+
+  /* walk through other tokens */
+  while (token != NULL)
+  {
+    if (counter == 1)
+    {
+      // printf("%f", strtod(token, &ptr));
+      return strtod(token, &ptr);
     }
     token = strtok(NULL, delim);
     counter++;
@@ -57,17 +119,9 @@ int setVal(char *command)
 
 int main()
 {
-  double kval = 200;
-  double ctemp = 0;
-  double centralAlpha = 0;
-
-  // double temp[NUM_CHILDREN];
-
-  int fd[6][2];
-
   while (running)
   {
-    char command[256] = "";
+    memcpy(command, "", 256);
 
     fgets(command, sizeof command, stdin);
 
@@ -86,7 +140,7 @@ int main()
       pid_t id;
       printf("Create %d external processes\n", NUM_CHILDREN);
 
-      for (int i = 0; i < NUM_CHILDREN; i++)
+      for (int i = 0; i < NUM_CHILDREN * 2; i++)
       {
         pipe(fd[i]);
       }
@@ -98,26 +152,33 @@ int main()
         {
           // Do initialization
           int id = getpid();
+          childNum = k;
 
           // signals
           signal(SIGUSR1, doChildWork);
-          signal(SIGUSR2, changeAlpha);
+          signal(SIGUSR2, updateChildAlpha);
+          signal(SIGCONT, setETemp);
 
-          fflush(NULL);
-          read(fd[k][0], childtemp, sizeof(double));
-          read(fd[k][0], alpha, sizeof(double));
-          printf("%f\n", childtemp);
-          
-          pause(); // wait for signal to start child work
-          
+          read(fd[k][0], &childtemp, sizeof(double));
+          read(fd[k][0], &alpha, sizeof(double));
+
+          // printf("temp : %f\nalpha : %f\n", childtemp, alpha);
+
+          while (running)
+          {
+            // wait for signal to start child work
+          }
           exit(32);
         }
         else
         {
           children[k] = id;
-          printf("Process %d: set initial temperature to %f\n", children[k], tempArr[k]);
+
+          printf("Process %d: set initial temperature to %0.2f\n", children[k], tempArr[k]);
+
           write(fd[k][1], &tempArr[k], sizeof(double));
-          write(fd[k][1], centralAlpha, sizeof(double));
+          write(fd[k][1], &alpha, sizeof(double));
+
           // more code for parent here
           // close pipe, send temp to chld
         }
@@ -130,18 +191,87 @@ int main()
     else if (strstr(command, "ctemp"))
     {
       ctemp = setVal(command);
+      printf("Central temp is now %0.2f\n", ctemp);
+    }
+    else if (strstr(command, "etemp"))
+    {
+      int target = readETemp(command);
+      kill(target, SIGCONT);
     }
     else if (strstr(command, "alpha"))
     {
-      centralAlpha = setVal(command);
+      alpha = setVal(command);
+      for (int i = 0; i < NUM_CHILDREN; i++)
+      {
+        write(fd[i][1], &alpha, sizeof(double));
+        kill(children[i], SIGUSR2);
+      }
     }
     else if (strstr(command, "start"))
     {
+      bool start = true;
+      bool allMatch = false;
+      for (int i = 0; i < NUM_CHILDREN; i++)
+      {
+        write(fd[i][1], &ctemp, sizeof(double));
+        kill(children[i], SIGUSR1);
+      }
+      while (start)
+      {
+        printf("Temperatures: [%.2f]", ctemp);
+
+        for (int i = 0; i < NUM_CHILDREN; i++)
+        {
+          printf(" %.2f", tempArr[i]);
+        }
+        printf("\n");
+
+        for (int i = 0; i < NUM_CHILDREN; i++)
+        {
+          write(fd[i][1], &ctemp, sizeof(double));
+        }
+        for (int i = 0; i < NUM_CHILDREN; i++)
+        {
+          read(fd[i + NUM_CHILDREN][0], &tempArr[i], sizeof(double));
+          // printf("read: %f", tempArr[i]);
+        }
+        for (int i = 0; i < NUM_CHILDREN; i++)
+        {
+          if (tempArr[i] != ctemp)
+          {
+            break;
+          }
+          else if (i == NUM_CHILDREN - 1)
+          {
+            allMatch = true;
+          }
+        }
+        if (allMatch)
+        {
+          double stop = 0;
+          for (int i = 0; i < NUM_CHILDREN; i++)
+          {
+            write(fd[i][1], &stop, sizeof(double));
+          }
+          start = false;
+        }
+        else
+        {
+          // calculation for new ctemp
+          int sum = 0;
+          for (int i = 0; i < NUM_CHILDREN; i++)
+          {
+            sum += tempArr[i];
+          }
+          ctemp = (kval * ctemp + sum) / (NUM_CHILDREN + kval);
+          ctemp = floorf(ctemp * 1000) / 1000;
+        }
+      }
+      printf("The system stabilized at %0.3f\n", ctemp);
     }
     else if (strstr(command, "status"))
     {
-      printf("Alpha = %.2f\tK = %.1f\nCentral temp is %.2f\n", centralAlpha, kval, ctemp);
-      printf("Parent %d\n", getpid());
+      printf("Alpha = %.2f\tK = %.1f\nCentral temp is %.2f\n", alpha, kval, ctemp);
       if (NUM_CHILDREN > 0)
       {
         printf(" #    PID   Enabled  Temperature\n--- ------- -------  -----------\n");
@@ -159,9 +289,13 @@ int main()
       {
         int child_status;
         kill(children[k], SIGINT);
+        printf("%d is shutting down\n", children[k]);
         wait(&child_status);
       }
       return 0;
+    }
+    else{
+      printf("Unknown command\n");
     }
   }
 }
