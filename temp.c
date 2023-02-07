@@ -154,7 +154,6 @@ int main()
         if (id == 0)
         {
           // Do initialization
-          int id = getpid();
           childNum = k;
 
           // signals
@@ -355,7 +354,7 @@ int main()
 
       for (int i = 0; i < NUM_CHILDREN; i++)
       {
-        if ((target == children[i]))
+        if (target == children[i])
         {
           isActive[i] = false;
           kill(children[i], SIGINT);
