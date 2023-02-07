@@ -26,6 +26,7 @@ double tempArr[10];
 int tempMatch[10];
 bool isActive[10];
 int activeChildren;
+double stop = __DBL_MIN__;
 
 int fd[20][2];
 
@@ -38,7 +39,7 @@ void doChildWork()
   while (running)
   {
     read(fd[childNum][0], &ctemp, sizeof(double));
-    if (ctemp == 0)
+    if (ctemp == stop)
     {
       running = false;
     }
@@ -153,6 +154,17 @@ int main()
         id = fork();
         if (id == 0)
         {
+          for (int i = 0; i < NUM_CHILDREN; i++)
+          {
+            if (i != k)
+            {
+              close(fd[i][0]);
+              close(fd[i][1]);
+              close(fd[i + NUM_CHILDREN][0]);
+              close(fd[i + NUM_CHILDREN][1]);
+            }
+          }
+
           // Do initialization
           childNum = k;
 
@@ -174,6 +186,8 @@ int main()
         }
         else
         {
+          close(fd[k][0]);
+          close(fd[k + NUM_CHILDREN][1]);
           children[k] = id;
           isActive[k] = true;
           printf("Process %d: set initial temperature to %0.2f\n", children[k], tempArr[k]);
@@ -256,7 +270,6 @@ int main()
         }
         if (allMatch)
         {
-          double stop = 0;
           for (int i = 0; i < NUM_CHILDREN; i++)
           {
             if (isActive[i])
@@ -290,7 +303,7 @@ int main()
         {
           int k = i + 1;
 
-          printf("%d   %d    %s       %.2f\n", k, children[i], isActive[i]?"YES":"NO", tempArr[i]);
+          printf("%d   %d    %s       %.2f\n", k, children[i], isActive[i] ? "YES" : "NO ", tempArr[i]);
         }
       }
     }
@@ -298,10 +311,13 @@ int main()
     {
       for (int k = 0; k < NUM_CHILDREN; k++)
       {
-        int child_status;
-        kill(children[k], SIGINT);
-        printf("%d is shutting down\n", children[k]);
-        wait(&child_status);
+        if (isActive[k])
+        {
+          int child_status;
+          kill(children[k], SIGINT);
+          printf("%d is shutting down\n", children[k]);
+          wait(&child_status);
+        }
       }
       return 0;
     }
@@ -322,6 +338,7 @@ int main()
         {
           isActive[i] = false;
           activeChildren = activeChildren - 1;
+          printf("%d is disabled\n", children[i]);
         }
       }
     }
@@ -337,6 +354,7 @@ int main()
         {
           isActive[i] = true;
           activeChildren = activeChildren + 1;
+          printf("%d is enabled\n", children[i]);
         }
       }
     }
@@ -351,7 +369,12 @@ int main()
         if (target == children[i])
         {
           isActive[i] = false;
+          close(fd[i][1]);
+          close(fd[i + NUM_CHILDREN][0]);
+          int child_status;
           kill(children[i], SIGINT);
+          printf("%d is shutting down\n", children[i]);
+          wait(&child_status);
         }
       }
     }
