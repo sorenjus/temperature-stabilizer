@@ -245,18 +245,12 @@ int main()
         }
         for (int i = 0; i < NUM_CHILDREN; i++)
         {
-          if (!isActive[i] && (i != NUM_CHILDREN - 1))
-          {
-          }
-          else if ((tempArr[i] != ctemp) && isActive[i])
+          if ((tempArr[i] != ctemp) && isActive[i])
           {
             break;
           }
-          else if (i == NUM_CHILDREN - 1 && isActive[i])
+          else if (i == NUM_CHILDREN - 1)
           {
-            allMatch = true;
-          }
-          else if(!isActive[i]){
             allMatch = true;
           }
         }
