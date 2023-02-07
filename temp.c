@@ -24,8 +24,12 @@ double ctemp = 0;
 pid_t children[10];
 double tempArr[10];
 int tempMatch[10];
+bool isActive[10];
+int activeChildren;
 
 int fd[20][2];
+
+int delay = 250;
 
 bool running = true;
 
@@ -138,7 +142,7 @@ int main()
       }
       pid_t id;
       printf("Create %d external processes\n", NUM_CHILDREN);
-
+      activeChildren = NUM_CHILDREN;
       for (int i = 0; i < NUM_CHILDREN * 2; i++)
       {
         pipe(fd[i]);
@@ -172,7 +176,7 @@ int main()
         else
         {
           children[k] = id;
-
+          isActive[k] = true;
           printf("Process %d: set initial temperature to %0.2f\n", children[k], tempArr[k]);
 
           write(fd[k][1], &tempArr[k], sizeof(double));
@@ -212,8 +216,11 @@ int main()
       bool allMatch = false;
       for (int i = 0; i < NUM_CHILDREN; i++)
       {
-        write(fd[i][1], &ctemp, sizeof(double));
-        kill(children[i], SIGUSR1);
+        if (isActive[i])
+        {
+          write(fd[i][1], &ctemp, sizeof(double));
+          kill(children[i], SIGUSR1);
+        }
       }
       while (start)
       {
@@ -221,27 +228,36 @@ int main()
 
         for (int i = 0; i < NUM_CHILDREN; i++)
         {
-          printf(" %.2f", tempArr[i]);
+          if (isActive[i])
+            printf(" %.2f", tempArr[i]);
         }
         printf("\n");
 
         for (int i = 0; i < NUM_CHILDREN; i++)
         {
-          write(fd[i][1], &ctemp, sizeof(double));
+          if (isActive[i])
+            write(fd[i][1], &ctemp, sizeof(double));
         }
         for (int i = 0; i < NUM_CHILDREN; i++)
         {
-          read(fd[i + NUM_CHILDREN][0], &tempArr[i], sizeof(double));
+          if (isActive[i])
+            read(fd[i + NUM_CHILDREN][0], &tempArr[i], sizeof(double));
           // printf("read: %f", tempArr[i]);
         }
         for (int i = 0; i < NUM_CHILDREN; i++)
         {
-          if (tempArr[i] != ctemp)
+          if (!isActive[i] && (i != NUM_CHILDREN - 1))
+          {
+          }
+          else if ((tempArr[i] != ctemp) && isActive[i])
           {
             break;
           }
-          else if (i == NUM_CHILDREN - 1)
+          else if (i == NUM_CHILDREN - 1 && isActive[i])
           {
+            allMatch = true;
+          }
+          else if(!isActive[i]){
             allMatch = true;
           }
         }
@@ -250,7 +266,8 @@ int main()
           double stop = 0;
           for (int i = 0; i < NUM_CHILDREN; i++)
           {
-            write(fd[i][1], &stop, sizeof(double));
+            if (isActive[i])
+              write(fd[i][1], &stop, sizeof(double));
           }
           start = false;
         }
@@ -260,17 +277,19 @@ int main()
           int sum = 0;
           for (int i = 0; i < NUM_CHILDREN; i++)
           {
-            sum += tempArr[i];
+            if (isActive[i])
+              sum += tempArr[i];
           }
-          ctemp = (kval * ctemp + sum) / (NUM_CHILDREN + kval);
+          ctemp = (kval * ctemp + sum) / (activeChildren + kval);
           ctemp = floorf(ctemp * 1000) / 1000;
         }
+        usleep(delay);
       }
       printf("The system stabilized at %0.3f\n", ctemp);
     }
     else if (!strcmp(token, "status\n"))
     {
-      printf("Alpha = %.2f\tK = %.1f\nCentral temp is %.2f\n", alpha, kval, ctemp);
+      printf("Alpha = %.2f\tK = %.1f\tDelay = %d\nCentral temp is %.2f\n", alpha, kval, delay, ctemp);
       if (NUM_CHILDREN > 0)
       {
         printf(" #    PID   Enabled  Temperature\n--- ------- -------  -----------\n");
@@ -278,7 +297,7 @@ int main()
         {
           int k = i + 1;
 
-          printf("%d   %d    YES       %.2f\n", k, children[i], tempArr[i]);
+          printf("%d   %d    %s       %.2f\n", k, children[i], isActive[i]?"YES":"NO", tempArr[i]);
         }
       }
     }
@@ -293,7 +312,58 @@ int main()
       }
       return 0;
     }
-    else{
+    else if (!strcmp(token, "delay"))
+    {
+      delay = setVal(token);
+      printf("Delay set to %d\n", delay);
+    }
+    else if (!strcmp(token, "disable"))
+    {
+      token = strtok(NULL, delim);
+
+      int target = atoi(token);
+
+      for (int i = 0; i < NUM_CHILDREN; i++)
+      {
+        if ((target == children[i]) && isActive[i])
+        {
+          isActive[i] = false;
+          activeChildren = activeChildren - 1;
+        }
+      }
+    }
+    else if (!strcmp(token, "enable"))
+    {
+      token = strtok(NULL, delim);
+
+      int target = atoi(token);
+
+      for (int i = 0; i < NUM_CHILDREN; i++)
+      {
+        if ((target == children[i]) && !isActive[i])
+        {
+          isActive[i] = true;
+          activeChildren = activeChildren + 1;
+        }
+      }
+    }
+    else if (!strcmp(token, "kill"))
+    {
+      token = strtok(NULL, delim);
+
+      int target = atoi(token);
+
+      for (int i = 0; i < NUM_CHILDREN; i++)
+      {
+        if ((target == children[i]))
+        {
+          isActive[i] = false;
+          kill(children[i], SIGINT);
+        }
+      }
+    }
+    else
+    {
       printf("Unknown command\n");
     }
   }
