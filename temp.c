@@ -507,6 +507,7 @@ int main()
         {
           // Set the process to inactive
           isActive[i] = false;
+          activeChildren = activeChildren - 1;
 
           // close the pipes to the process
           close(fd[i][1]);
