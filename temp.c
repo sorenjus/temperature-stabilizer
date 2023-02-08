@@ -10,28 +10,39 @@
 #include <string.h>
 #include <math.h>
 
+//Integer representing the number of external processes
 int NUM_CHILDREN = -1;
+//Represents the external temperature
 double childtemp = 0;
+//Represents the childs place in the parent arrays
 int childNum = -1;
-
+//deliminater used when parsing entered commands
 char *delim = " ";
+//Tokenized command string
 char *token;
+//Entered command from stdin
 char command[256] = "";
-
+//Represents the alpha variable
 double alpha = 0.9;
+//Represents the k variable
 double kval = 200;
+//Represents the central process temperature
 double ctemp = 0;
+//Contains the PID for all child processes
 pid_t children[10];
+//Contains the most recent child temperature for all external processes
 double tempArr[10];
-int tempMatch[10];
+//Represents if the external process is enabled
 bool isActive[10];
+//Represents the number of currently enabled processes during current run
 int activeChildren;
+//Signal command for child process to stop doing work
 double stop = __DBL_MIN__;
-
+//Pipe array
 int fd[20][2];
-
+//Value of the current delay between cycles when running
 int delay = 250;
-
+//Represents if the current while loop should be exited
 bool running = true;
 
 void doChildWork()
