@@ -71,7 +71,7 @@ void doChildWork()
       // update the child process temperature
       childtemp = (alpha * childtemp + (1 - alpha) * ctemp);
       // Round the temperature to five decimal places
-      childtemp = floorf(childtemp * 100000) / 100000;
+      childtemp = floorf(childtemp * 1000) / 1000;
       // write the current value of childtemp to the parent process
       write(fd[childNum + NUM_CHILDREN][1], &childtemp, sizeof(double));
     }
@@ -392,8 +392,8 @@ int main()
           }
           // Update the central temperature
           ctemp = (((kval * ctemp) + sum) / (activeChildren + kval));
-          // Round the value to five decimal places
-          ctemp = floorf(ctemp * 100000) / 100000;
+          // Round the value to three decimal places
+          ctemp = floorf(ctemp * 1000) / 1000;
         }
         // Pause the process for the delay value
         usleep(delay);
